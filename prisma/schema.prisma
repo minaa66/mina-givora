@@ -1,0 +1,186 @@
+// Prisma Schema for Givora E-commerce
+// Supports both SQLite (development) and MySQL (production)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // Change to "mysql" for production
+  url      = env("DATABASE_URL")
+}
+
+// User Model - Authentication and Profile
+model User {
+  id                      String    @id @default(uuid())
+  email                   String    @unique
+  passwordHash            String    @map("password_hash")
+  firstName               String?   @map("first_name")
+  lastName                String?   @map("last_name")
+  phone                   String?
+  address                 String?
+  accountType             String    @default("retail") @map("account_type") // "retail" or "wholesale"
+  isVerified              Boolean   @default(false) @map("is_verified")
+  approved                Boolean   @default(false) // For wholesale approval
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  verificationCode        String?   @map("verification_code")
+  verificationCodeExpiry  DateTime? @map("verification_code_expiry")
+  verificationEmailSentAt DateTime? @map("verification_email_sent_at")
+
+  // Relations
+  cartItems            CartItem[]
+  orders               Order[]
+  wholesaleApplication WholesaleApplication?
+  passwordResetTokens  PasswordResetToken[]
+  Token                Token[]
+
+  @@map("users")
+}
+
+// Product Model - Catalog Management
+model Product {
+  id             Int      @id @default(autoincrement())
+  name           String
+  category       String
+  description    String?
+  sku            String   @unique
+  moq            Int      @default(100) // Minimum Order Quantity
+  retailPrice    Float    @map("retail_price")
+  wholesalePrice Float    @map("wholesale_price")
+  stockQuantity  Int      @map("stock_quantity")
+  imageUrl       String?  @map("image_url")
+  cloudinaryId   String?  @map("cloudinary_id") // For Cloudinary cleanup
+  images         String?  // JSON string array of images: [{ imageUrl: string, cloudinaryId?: string|null }]
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+// Cart Model - Shopping Cart
+model CartItem {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  productId Int      @map("product_id")
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("cart_items")
+}
+
+// Order Model - Order Management
+model Order {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  orderDate       DateTime @default(now()) @map("order_date")
+  totalAmount     Float    @map("total_amount")
+  subtotal        Float
+  taxAmount       Float    @map("tax_amount")
+  shippingCost    Float    @map("shipping_cost")
+  shippingMethod  String?  @map("shipping_method")
+  status          String   @default("pending") // pending, processing, shipped, delivered, cancelled
+  paymentMethod   String?  @map("payment_method")
+  stripePaymentId String?  @map("stripe_payment_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+// Order Items Model - Order Line Items
+model OrderItem {
+  id              String   @id @default(uuid())
+  orderId         String   @map("order_id")
+  productId       Int      @map("product_id")
+  quantity        Int
+  unitPrice       Float    @map("unit_price")
+  discountApplied Float    @default(0) @map("discount_applied")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("order_items")
+}
+
+// Wholesale Application Model - B2B Approval Workflow
+model WholesaleApplication {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  businessName      String   @map("business_name")
+  einNumber         String   @map("ein_number")
+  businessType      String   @map("business_type")
+  address           String
+  city              String
+  state             String
+  zip               String
+  phone             String
+  approvalStatus    String   @default("pending") @map("approval_status") // pending, approved, rejected
+  totalUnitsOrdered Int      @default(0) @map("total_units_ordered")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("wholesale_applications")
+}
+
+// Contact Message Model - Customer Inquiries
+model ContactMessage {
+  id         String   @id @default(uuid())
+  name       String
+  email      String
+  subject    String
+  message    String
+  readStatus Boolean  @default(false) @map("read_status")
+  adminReply String?  @map("admin_reply")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("contact_messages")
+}
+
+// Password Reset Token Model - Secure Password Recovery
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// Generic Token Model - For various verification purposes
+model Token {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  type      String // e.g., "email_verification", "login_magic_link"
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tokens")
+}
