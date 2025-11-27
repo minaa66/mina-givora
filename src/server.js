@@ -80,7 +80,8 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
-
+//test
+console.log("test");
 // Serve static files from dist (SPA)
 app.use(express.static(path.join(__dirname, '../dist')));
 
