@@ -37,5 +37,5 @@ Thumbs.db
 *~
 
 # Build
-dist/
-build/
+# dist/
+# build/
